@@ -1,0 +1,1341 @@
+---
+Title: "Predictive Model"
+Author: "Chijiuka Fortune Akuma"
+StudentID: "2423891"
+Course: "DAT7303"
+CourseTitle: "Data Mining and Machine Learning"
+Institute: "University of Greater Manchester"
+
+html_document: default
+runtime: shiny
+---
+
+```{r setup, include=FALSE}
+    knitr::opts_chunk$set(echo = TRUE)
+```
+
+# Install Packages
+
+```{r install-packages, eval=FALSE}
+    install.packages("Metrics")
+    install.packages("caret")
+    install.packages("randomForest")
+    install.packages("rpart")
+    install.packages("corrplot")
+    install.packages("pROC")
+    install.packages("keras")
+    install.packages("reticulate")
+    install.packages("e1071")
+    install.packages("readxl")
+    install.packages("zoo")
+    install.packages("dplyr")
+    install.packages("ggplot2")
+    install.packages("tidyverse")
+    install.packages("lubridate")
+    install.packages("doParallel")
+    install.packages("mlr")
+    install.packages("corrplot")
+```
+
+# Load Libraries
+
+```{r Load Libraries}
+    # For creating correlation matrix visualizations
+    library(corrplot)
+    
+    # For building random forest models (classification and regression)
+    library(randomForest)
+    
+    # For creating decision tree models using CART algorithm
+    library(rpart)
+    
+    # For training, tuning, and evaluating machine learning models
+    library(caret)
+    
+    # For calculating evaluation metrics like RMSE, MAE, etc.
+    library(Metrics)
+    
+    # For support vector machines and additional ML utilities
+    library(e1071)
+    
+    # For reading Excel files (.xls and .xlsx)
+    library(readxl)
+    
+    # For data manipulation and transformation
+    library(dplyr)
+    
+    # For working with time series data and rolling calculations
+    library(zoo)
+    
+    # For plotting ROC curves and calculating AUC
+    library(pROC)
+    
+    # For integrating Python code and environments within R
+    library(reticulate)
+    
+    # For building and training deep learning models, including LSTM
+    library(keras)
+    
+    # For working with date and time data
+    library(lubridate)
+    
+    # A collection of packages for data science (includes ggplot2, dplyr, etc.)
+    library(tidyverse)
+    
+    # For creating data visualizations
+    library(ggplot2)
+    
+    # For enabling parallel processing to speed up computations
+    library(doParallel)
+    
+    # For building, evaluating, and tuning machine learning workflows
+    library(mlr)
+    
+    # Libraries for building interactive dashboards in R
+    library(shiny)             # Core package for building web applications
+    library(bslib)             # For customizing themes in Shiny dashboards
+    library(shinydashboard)    # For creating structured dashboard layouts
+    library(leaflet)           # For rendering interactive maps
+    library(DT)                # For rendering interactive data tables
+    
+```
+
+# Load the Data set
+
+```{r Load the Dataset}
+    setwd("C:/Users/-/OneDrive - University of Bolton/DAT703-RClass/Porfolio 3")
+    housing_data <- read.csv("Housing Data_Same Region.csv")
+```
+
+# DATA UNDERSTANDING PHASE.
+
+## Inspect the Dataset to get an initial understanding of it.
+
+```{r Preview the Dataset}
+    print("Initial Data Types:")
+    str(housing_data)
+    print("\nSample Data:")
+    view(housing_data)
+    colnames(housing_data)
+```
+
+# Check for duplicates
+
+```{r}
+    num_duplicates <- housing_data %>% duplicated() %>% sum()
+    print(num_duplicates)
+    
+    #Step 2: Remove duplicate rows
+    housing_data <- housing_data %>% distinct()
+    
+    #Step 3: Confirm removal
+    num_duplicates_after <- housing_data %>% duplicated() %>% sum()
+    cat("Number of duplicate rows after removal:", num_duplicates_after, "\n")
+```
+
+# Check the distribution of Sale_Prc
+
+```{r Check the distribution of Sale_prc}
+    hist(housing_data$SALE_PRC, breaks = 30, main = "Distribution of Sale Price")
+```
+
+# DATA PREPARATION PHASE
+
+## Convert the Columns into Numeric Formats
+
+```{r DATA PREPARATION PHASE}
+    # Use mutate(across()) to apply as.numeric to all columns
+    housing_data <- housing_data %>%
+    mutate(across(everything(), ~ as.numeric(as.character(.))))
+    
+```
+
+## Verify the conversion
+
+```{r}
+    print("\nUpdated Data Types:")
+    str(housing_data)
+    print("\nSample Data After Conversion:")
+    head(housing_data)
+```
+
+## Handle Missing Values
+
+```{r}
+    cols_with_na <- colSums(sapply(housing_data, function(col) sapply(col, function(x) is.na(x) || is.nan(x) || is.null(x))))
+    print(cols_with_na)
+```
+
+## Drop Columns that are not relevant
+
+```{r}
+    housing_data <- subset(housing_data, select = -c(LATITUDE, LONGITUDE, PARCELNO))
+    View(housing_data)
+```
+
+## Check for Negative Outliers with a Function
+
+```{r}
+    check_negative_outliers <- function(data) {
+    # Initialize list to store results
+    negative_values_summary <- list()
+    # Loop through numeric columns to detect negative values
+    for (col_name in names(data)) {
+    column_data <- data[[col_name]]
+    # Process only numeric columns
+    if (is.numeric(column_data)) {
+    # Identify negative values
+    negative_values <- column_data < 0
+    neg_count <- sum(negative_values, na.rm = TRUE)
+    # Print details if negative values are found
+    if (neg_count > 0) {
+    cat("Negative values in", col_name, ":\n")
+    print(column_data[negative_values])
+    cat("Total negative values in", col_name, ":", neg_count, "\n\n")
+    }
+    # Store count in summary
+    negative_values_summary[[col_name]] <- neg_count
+    }
+    }
+    # Print final summary
+    cat("Summary of negative value outliers per column:\n")
+    print(negative_values_summary)
+    # Return the summary (optional, for further use)
+    return(negative_values_summary)
+    }
+```
+
+## Use the Function on the Dataset
+
+```{r}
+    negative_outlier_summary <- check_negative_outliers(housing_data)
+```
+
+## Save the Cleaned Dataset for future use
+
+```{r}
+    write.csv(housing_data, "housing_data.csv", row.names = FALSE)
+```
+
+## Feature Engineering to determine the relevant Features
+
+```{r}
+    # Setting the seed
+    set.seed(123)
+    # Train Random Forest
+    rf_model <- randomForest(SALE_PRC ~ ., data = housing_data, importance = TRUE, ntree = 100)
+    # Get feature importance
+    importance_df <- data.frame(
+    Feature = rownames(importance(rf_model)),
+    Importance = importance(rf_model)[, "IncNodePurity"]
+    ) %>%
+    arrange(desc(Importance))
+```
+
+## View the Features
+
+```{r}
+    # View top features
+    print(head(importance_df, 13))
+```
+
+## Plot all the Features
+
+```{r}
+    # PLOT THE FEATURE IMPORTANCE -------------
+    library(ggplot2)
+    ggplot(importance_df[1:13, ], aes(x = reorder(Feature, Importance), y = Importance)) +
+    geom_col(fill = "steelblue") +
+    coord_flip() +
+    labs(title = "Top 13 Important Features for Predicting SalePrice", x = "Feature", y = "Importance")
+```
+
+## Get the best 11 Features in the Dataset
+
+```{r}
+    cor_matrix <- cor(housing_data, use = "complete.obs")
+    cor_with_saleprice <- cor_matrix[, "SALE_PRC"]
+    top_corr_features <- names(sort(abs(cor_with_saleprice), decreasing = TRUE)[2:12])  # exclude SalePrice
+    # Get top 11 features from random forest
+    top_rf_features <- importance_df$Feature[1:11]
+    
+    # Final selected features (union of correlation and random forest)
+    selected_features <- union(top_corr_features, top_rf_features)
+    
+    # Filter importance_df to include only selected features
+    plot_df <- importance_df %>% filter(Feature %in% selected_features)
+```
+
+## Plot the best 11 Features
+
+```{r}
+    ggplot(plot_df, aes(x = reorder(Feature, Importance), y = Importance)) +
+    geom_col(fill = "royalblue") +
+    coord_flip() +
+    labs(
+    title = "Top Important Features for Predicting SalePrice (Combined)",
+    x = "Feature",
+    y = "Importance (IncNodePurity)"
+    ) +
+    theme_minimal()
+```
+
+## Create a new data frame with the selected features
+
+```{r}
+    housing_data <- housing_data %>%
+    select(all_of(selected_features), SALE_PRC)
+```
+
+## View the new Dataframe
+
+```{r}
+    View(housing_data)
+```
+
+## Save the data frame to file (optional)
+
+```{r}
+    write.csv(housing_data, "housing_data.csv", row.names = FALSE)
+```
+
+## Log transformation of the Sale_Prc to Normalise it
+
+```{r}
+    housing_data$log_price <- log(housing_data$SALE_PRC)
+```
+
+## View the Distribution of the normalised Sale_Prc
+
+```{r}
+    hist(housing_data$log_price,
+    breaks = 30,
+    main = "Distribution of Log Price",
+    col = "darkseagreen3",
+    xlab = "Log Price")
+```
+
+## Split data into training and testing Sets
+
+```{r}
+    #Set seed for reproductibility
+    set.seed(123)
+    
+    train_index <- createDataPartition(housing_data$log_price, p = 0.8, list = FALSE)
+    train <- housing_data[train_index, ]
+    test <- housing_data[-train_index, ]
+    
+    # Scale features
+    pre_proc <- preProcess(train %>% select(-SALE_PRC, -log_price), method = c("center", "scale"))
+    X_train <- predict(pre_proc, train %>% select(-SALE_PRC, -log_price))
+    X_test <- predict(pre_proc, test %>% select(-SALE_PRC, -log_price))
+    
+    y_train <- train$log_price
+    y_test <- test$log_price
+```
+
+## Combine the data from training
+
+```{r}
+    # Combine the scaled training features with the target variable
+    train_data <- cbind(X_train, log_price = y_train)
+```
+
+# MODELLING PHASE
+
+## FITTING OF DIFFERENT MODELS
+
+## Multiple Linear Regression Model (LM)
+
+```{r}
+    # Fit the linear regression model
+    lm_model <- lm(log_price ~ ., data = train_data)
+    
+    # View the model summary
+    summary(lm_model)
+    
+    # Make predictions on the test set
+    lm_predictions <- predict(lm_model, newdata = X_test)
+    
+    # Display the first few predictions
+    head(lm_predictions)
+    
+    # Evaluate model performance
+    lm_performance <- postResample(pred = lm_predictions, obs = y_test)
+    
+    # Print performance metrics (RMSE, R-squared, MAE)
+    print(lm_performance)
+```
+
+## Support Vector Machine Model (SVM)
+
+### Linear Kernel
+
+```{r}
+    # Support Vector Regression (SVR) with Linear Kernel-------
+    svr_linear <- svm(log_price ~ ., data = train_data, kernel = "linear")
+    
+    # Model Summary
+    summary(svr_linear)
+    
+    # Predictions and Performance Evaluation
+    svr_linear_predictions <- predict(svr_linear, newdata = X_test)
+    svr_performance_linear <- postResample(pred = svr_linear_predictions, obs = y_test)
+    
+    # Print Performance Metrics
+    print(svr_performance_linear)
+```
+
+### RBF Kernel
+
+```{r}
+    # Support Vector Regression (SVR) with RBF Kernel---------
+    svr_rbf <- svm(log_price ~ ., data = train_data)
+    
+    # Model Summary
+    summary(svr_rbf)
+    
+    # Predictions and Performance Evaluation
+    svr_rbf_predictions <- predict(svr_rbf, newdata = X_test)
+    svr_performance_rbf <- postResample(pred = svr_rbf_predictions, obs = y_test)
+    
+    # Print Performance Metrics
+    print(svr_performance_rbf)
+```
+
+### Poly kernel
+
+```{r}
+    # Support Vector Regression (SVR) with Polynomial Kernel --------
+    svr_poly <- svm(log_price ~ ., data = train_data, kernel = "poly")
+    
+    # Model Summary
+    summary(svr_poly)
+    
+    # Predictions and Performance Evaluation
+    svr_poly_predictions <- predict(svr_poly, newdata = X_test)
+    svr_performance_poly <- postResample(pred = svr_poly_predictions, obs = y_test)
+    
+    # Print Performance Metrics
+    print(svr_performance_poly)
+```
+
+## Decision Tree Model (DT)
+
+```{r}
+    # Train the model
+    dt_model <- rpart(log_price ~ ., data = train_data)
+    
+    # Predict values
+    dt_predictions <- predict(dt_model, newdata = X_test)
+    
+    # Evaluate model performance
+    dt_performance <- postResample(pred = dt_predictions, obs = y_test)
+    print(dt_performance)
+```
+
+## Random Forest Model (RF)
+
+### N = 100
+
+```{r}
+    #Train the model with 100 trees
+    rf_model_n100 <- randomForest(log_price ~ ., data = train_data, ntree = 100)
+    
+    # Model summary and performance evaluation
+    summary(rf_model_n100)
+    rf_predictions_n100 <- predict(rf_model_n100, newdata = X_test)
+    rf_performance_n100 <- postResample(pred = rf_predictions_n100, obs = y_test)
+    print(rf_performance_n100)
+```
+
+### N = 200
+
+```{r}
+    # Train the model with 200 trees
+    rf_model_n200 <- randomForest(log_price ~ ., data = train_data, ntree = 200)
+    
+    # Model summary and performance evaluation
+    summary(rf_model_n200)
+    rf_predictions_n200 <- predict(rf_model_n200, newdata = X_test)
+    rf_performance_n200 <- postResample(pred = rf_predictions_n200, obs = y_test)
+    print(rf_performance_n200)
+```
+
+### N = 500
+
+```{r}
+    # Train the model with 500 trees
+    rf_model_n500 <- randomForest(log_price ~ ., data = train_data, ntree = 500)
+    
+    # Model summary and performance evaluation
+    summary(rf_model_n500)
+    rf_predictions_n500 <- predict(rf_model_n500, newdata = X_test)
+    rf_performance_n500 <- postResample(pred = rf_predictions_n500, obs = y_test)
+    print(rf_performance_n500)
+```
+
+## LSTM Model ( Long Short term Memory)
+
+### Reshape the data to 3D: (samples, time steps, features)
+
+```{r}
+    X_train_lstm <- array(X_train, dim = c(nrow(X_train), 1, ncol(X_train)))
+    X_test_lstm <- array(X_test, dim = c(nrow(X_test), 1, ncol(X_test)))
+```
+
+### Build the Model
+
+```{r}
+    model <- keras_model_sequential() %>%
+    layer_lstm(units = 50, activation = 'relu', input_shape = c(1, ncol(X_train))) %>%
+    layer_dense(units = 1)  # Output layer for regression task (1 neuron)
+    # Compile the model using the Adam optimizer
+    model %>% compile(
+    loss = 'mean_squared_error',  # For regression
+    optimizer = optimizer_adam(),  # Adam optimizer
+    metrics = c('mean_absolute_error')  # Evaluate using mean absolute error
+    )
+```
+
+### Model Summary
+
+```{r}
+    summary(model)
+```
+
+### Convert the data to matrix format
+
+```{r}
+    X_train_lstm <- as.matrix(X_train)  # Convert to matrix
+    X_test_lstm <- as.matrix(X_test)    # Convert to matrix
+    
+    # Ensure y_train and y_test are numeric vectors
+    y_train <- as.numeric(y_train)
+    y_test <- as.numeric(y_test)
+```
+
+### Reshape X_train_lstm and X_test_lstm for LSTM (samples, time steps, features)
+
+```{r}
+    X_train_lstm <- array(X_train_lstm, dim = c(nrow(X_train_lstm), 1, ncol(X_train_lstm)))
+    X_test_lstm <- array(X_test_lstm, dim = c(nrow(X_test_lstm), 1, ncol(X_test_lstm)))
+```
+
+### Check the dimensions to ensure correctness
+
+```{r}
+    dim(X_train_lstm)  # Should return (samples, 1, features)
+    dim(X_test_lstm)   # Should return (samples, 1, features)
+```
+
+### Fit the Model
+
+```{r}
+    history <- model %>% fit(
+    X_train_lstm, y_train,
+    epochs = 50,  # Number of epochs (you can adjust this)
+    batch_size = 32,  # Batch size (you can adjust this)
+    validation_data = list(X_test_lstm, y_test)  # Validation data
+    )
+```
+
+### Make predictions on the test set and evaluate
+
+```{r}
+    lstm_predictions <- model %>% predict(X_test_lstm)
+    # Evaluate the model performance using postResample
+    lstm_performance <- postResample(pred = lstm_predictions, obs = y_test)
+    print(lstm_performance)
+```
+
+# EVALUATION PHASE
+
+## Extract MAE performance values from each model
+
+```{r}
+    rf1 <- rf_performance_n100[3]
+    rf2 <- rf_performance_n500[3]
+    rf3 <- rf_performance_n200[3]
+    dt1 <- dt_performance[3]
+    lm <- lm_performance[3]
+    svr1 <- svr_performance_rbf[3]
+    svr2 <- svr_performance_poly[3]
+    svr3 <- svr_performance_linear[3]
+    lstm <- lstm_performance[3]
+```
+
+## Create a data frame with these values
+
+```{r}
+    data <- data.frame(
+    model = c("Random Forest N100", "Random Forest N500", "Random Forest N200",
+    "Decision Tree", "Linear Regression", "Support Vector_RBF",
+    "Support Vector_Poly",
+    "Support Vector_Linear",
+    "LSTM"),
+    performance = c(rf1, rf2, rf3, dt1, lm, svr1, svr2, svr3, lstm)
+    )
+```
+
+## Display the results of the evaluation metrics
+
+```{r}
+    # Display the results of the evaluation metrics
+    print(data)
+```
+
+## Plot the Performance of the Models
+
+```{r}
+    ggplot(data, aes(x = model, y = performance, fill = model)) +
+    geom_bar(stat = "identity") +
+    # Add values on top of bars
+    geom_text(aes(label = round(performance, 4)), vjust = -0.5, color = "black") +
+    theme_minimal() +
+    labs(title = "Performance Comparison of Models using MAE", x = "Model", y = "Performance") +
+    theme(axis.text.x = element_text(angle = 45, hjust = 1))
+```
+
+## Hyper parameter Tuning of the Best Model
+
+```{r}
+    # Extract best mtry using tuneRF
+    set.seed(123)
+    tuned <- tuneRF(
+    x = X_train,
+    y = y_train,
+    ntreeTry = 100,             # Number of trees to try at each step
+    stepFactor = 1.5,           # Increment mtry by 1.5x
+    improve = 0.01,             # Stop if accuracy doesn't improve > 1%
+    trace = TRUE,
+    plot = TRUE
+    )
+    
+    # Extract best mtry value
+    best_mtry <- tuned[which.min(tuned[, 2]), 1]
+    cat("Best mtry:", best_mtry, "\n")
+```
+
+## Find the Optimal Ntree
+
+```{r}
+    # Set optimal mtry value
+    best_mtry <- 4  # You can adjust based on your result
+    
+    # Define a range of ntree values to test
+    ntree_vals <- seq(50, 500, by = 1)  # Adjust range as necessary
+    
+    # Initialize empty vector to store OOB errors
+    oob_errors <- c()
+    
+    # Loop through ntree values and compute OOB error
+    for (n in ntree_vals) {
+    set.seed(123)  # For reproducibility
+    model <- randomForest(x = X_train, y = y_train, mtry = best_mtry, ntree = n, importance = TRUE)
+    
+    # Print the OOB error for the current ntree value
+    cat("ntree =", n, "OOB Error (MSE) =", model$mse[n], "\n")
+    
+    # Store OOB error
+    oob_errors <- c(oob_errors, model$mse[n])
+    }
+    
+    # Identify the optimal ntree based on minimum OOB error (MSE)
+    best_ntree <- ntree_vals[which.min(oob_errors)]
+    cat("Optimal ntree based on OOB error (MSE):", best_ntree, "\n")
+```
+
+## Train the final Model
+
+```{r}
+    # Train the final model using the optimal ntree (457) ------------
+    final_model <- randomForest(x = X_train, y = y_train, mtry = 4, ntree = 457, importance = TRUE)
+    
+    # Print the model summary
+    print(final_model)
+```
+
+## Make Predictions and Evaluate the Performance
+
+```{r}
+    # Make predictions on the test set
+    y_pred <- predict(final_model, X_test)
+    
+    # Evaluate the model on the test set using postResample --------
+    model_evaluation <- postResample(pred = y_pred, obs = y_test)
+    print(model_evaluation)
+```
+
+## Extract Feature Importance of the Best Model
+
+```{r}
+    # Extract Feature Importance of the Best Model
+    importance_values <- final_model$importance
+    print(importance_values)  # Display importance values
+    
+    # Visualize the Feature Importance with Red Bars
+    importance_df <- data.frame(Feature = rownames(importance_values), Importance = importance_values[, 1])
+    ggplot(importance_df, aes(x = reorder(Feature, Importance), y = Importance)) +
+    geom_bar(stat = "identity", fill = "red") +  # Set bar color to red
+    coord_flip() +
+    labs(title = "Feature Importance", x = "Feature", y = "Importance") +
+    theme_minimal()
+```
+
+## Plot the Heat Map of Correlations between Variables
+
+```{r}
+    # Combine X_train and y_train into a single data frame
+    train_data <- cbind(X_train, SALE_PRC = y_train)
+    
+    # Select numeric variables only
+    numeric_vars <- sapply(train_data, is.numeric)
+    cor_matrix <- cor(train_data[, numeric_vars], use = "complete.obs")
+    
+    # Heatmap of correlations
+    corrplot(cor_matrix, method = "color", type = "upper",
+    addCoef.col = "red", number.cex = 0.7,
+    tl.cex = 0.8, order = "hclust")
+```
+
+## Save the Optimal Model With preProcess Details
+
+```{r}
+    # Save the best (final) model
+    save(final_model, pre_proc, X_train, file = "model_objects.RData")
+```
+
+## Save other models ( Optional)
+
+```{r}
+    # Save other trained models
+    save(lm_model, pre_proc, X_train, file = "lm_model.RData")
+    save(svr_linear, pre_proc, X_train, file = "svr_linear.RData")
+    save(svr_rbf, pre_proc, X_train, file = "svr_rbf.RData")
+    save(svr_poly, pre_proc, X_train, file = "svr_poly.RData")
+    save(dt_model, pre_proc, X_train, file = "dt_model.RData")
+    save(rf_model_n100, pre_proc, X_train, file = "rf_model_n100.RData")
+    save(rf_model_n200, pre_proc, X_train, file = "rf_model_n200.RData")
+    save(rf_model_n500, pre_proc, X_train, file = "rf_model_n500.RData")
+    save(model, pre_proc, X_train, file = "lstm_model.RData")
+```
+
+## Make Prediction With Sample Dataset
+
+### Create a data frame with the detials
+
+```{r}
+    # Create a new observation (make sure the structure matches training data)
+    new_data <- data.frame(
+    LND_SQFOOT      = 11247,
+    TOT_LVG_AREA    = 4552,
+    SPEC_FEAT_VAL   = 2105,
+    RAIL_DIST       = 4871.9,
+    OCEAN_DIST      = 18507.2,
+    WATER_DIST      = 375.8,
+    CNTR_DIST       = 43897.9,
+    SUBCNTR_DI      = 40115.7,
+    HWY_DIST        = 41917.1,
+    age             = 42,
+    structure_quality = 5
+    )
+```
+
+### Preprocess the data and use it fro prediction
+
+```{r}
+    # Match column names and order to the training/preprocessing structure
+    names(new_data) <- names(X_train)
+    new_data <- new_data[, names(pre_proc$mean)]
+    
+    #Apply preprocessing
+    new_data_scaled <- predict(pre_proc, new_data)
+    
+    #Make prediction using the trained final model
+    predicted_log_price <- predict(final_model, newdata = new_data_scaled)
+    
+    #Convert log(price) to actual price
+    predicted_price <- exp(predicted_log_price)
+```
+
+## Display the Predicted Price
+
+```{r}
+    #Display predicted price in US dollars
+    cat("Predicted House Price: $", round(predicted_price, 2), "\n")
+    summary(housing_data$SALE_PRC)
+```
+
+# DEPLOYMENT
+
+## Create a Reusable function for Prediction
+
+```{r}
+    predict_house_price <- function(new_data, X_train, pre_proc, final_model) {
+    # Match column names and order
+    names(new_data) <- names(X_train)
+    new_data <- new_data[, names(pre_proc$mean)]
+    
+    # Apply preprocessing
+    new_data_scaled <- predict(pre_proc, new_data)
+    
+    # Predict log price and convert to actual price
+    predicted_log_price <- predict(final_model, newdata = new_data_scaled)
+    predicted_price <- exp(predicted_log_price)
+    
+    return(round(predicted_price, 2))
+    }
+```
+
+# Setting up the Dashboard
+
+### Load the data and Model
+
+```{r}
+    setwd("C:/Users/-/OneDrive - University of Bolton/DAT703-RClass/Porfolio 3")
+    # Load the saved randomForest model
+    load("model_objects.RData")
+    
+    housing_data <- read.csv("housing_data-DESKTOP-MI1L3S5.csv")
+    View(housing_data)
+    
+```
+
+## Define the Prediction Function
+
+```{r}
+    #Define function for prediction
+    predict_house_price <- function(input_data) {
+    names(input_data) <- names(X_train)
+    new_data <- input_data[, names(pre_proc$mean)]
+    new_data_scaled <- predict(pre_proc, input_data)
+    predicted_log_price <- predict(final_model, newdata = new_data_scaled)
+    predicted_price <- exp(predicted_log_price)
+    return(round(predicted_price, 2))
+    }
+```
+
+## Define the UI of the Dashboard
+
+```{r}
+    ui <- tagList(
+    tags$head(
+    tags$link(rel = "stylesheet", type = "text/css", href = "style.css"),
+    tags$script(src = "script.js")
+    ),
+    
+    # Dynamic UI based on login state
+    uiOutput("page")
+    )
+```
+
+## Define Server Logic
+
+```{r}
+    # Define Server Logic
+    server <- function(input, output, session) {
+    #####MAP of REgion
+    
+    # Define the bounding coordinates of the region
+    lat_min <- 25.88728052
+    lat_max <- 25.97438187
+    lon_min <- -80.18366859
+    lon_max <- -80.11974639
+    
+    # Render the map with leaflet
+    output$region_map <- renderLeaflet({
+    leaflet() %>%
+    addTiles() %>%
+    setView(lng = (lon_min + lon_max) / 2, lat = (lat_min + lat_max) / 2, zoom = 13) %>%
+    addRectangles(
+    lng1 = lon_min, lat1 = lat_min, lng2 = lon_max, lat2 = lat_max,
+    color = "blue", weight = 2, opacity = 0.5, fillColor = "blue", fillOpacity = 0.2
+    )
+    })
+    
+    
+    
+    output$total_houses <- renderValueBox({
+    valueBox(
+    value = formatC(nrow(housing_data), format = "f", digits = 2, big.mark = ","),
+    subtitle = "Total Houses Available",
+    icon = icon("home"),
+    color = "blue"
+    )
+    })
+    
+    # Render the value boxes
+    output$max_price <- renderValueBox({
+    valueBox(
+    value = paste0("£", formatC(max_price(), format = "f", digits = 2, big.mark = ",")),
+    subtitle = "Maximum Sale Price",
+    icon = icon("arrow-up"),
+    color = "green"
+    )
+    })
+    
+    # Define reactive expressions to calculate max and min prices from the housing dataset
+    max_price <- reactive({
+    max(housing_data$SALE_PRC, na.rm = TRUE)
+    })
+    
+    min_price <- reactive({
+    min(housing_data$SALE_PRC, na.rm = TRUE)
+    })
+    
+    output$min_price <- renderValueBox({
+    valueBox(
+    value = paste0("£", formatC(min_price(), format = "f", digits = 2, big.mark = ",")),
+    subtitle = "Minimum Sale Price",
+    icon = icon("arrow-down"),
+    color = "red"
+    )
+    })
+    
+    
+    output$total_clients <- renderValueBox({
+    valueBox(
+    value = formatC(floor(nrow(housing_data) / 3), format = "f", digits = 2, big.mark = ","),
+    subtitle = "Clients Served",
+    icon = icon("users"),
+    color = "orange"
+    )
+    })
+    
+    output$houses_sold <- renderValueBox({
+    valueBox(
+    value = formatC(floor(nrow(housing_data) / 2), format = "f", digits = 2, big.mark = ","),
+    subtitle = "Houses Sold",
+    icon = icon("check-circle"),
+    color = "purple"
+    )
+    })
+    
+    output$countries <- renderValueBox({
+    valueBox(
+    value = formatC(12, format = "f", digits = 2, big.mark = ","),
+    subtitle = "Countries We Cover",
+    icon = icon("globe"),
+    color = "teal"
+    )
+    })
+    
+    
+    
+    
+    # Reactive value to track login state
+    logged_in <- reactiveVal(FALSE)
+    
+    # Render the appropriate page based on login state
+    output$page <- renderUI({
+    if (logged_in()) {
+    # Admin Dashboard with Sidebar
+    dashboardUI()
+    } else {
+    # Login Page (without Sidebar)
+    loginUI()
+    }
+    })
+    
+    # Login Page UI (without Sidebar)
+    loginUI <- function() {
+    tagList(
+    div(class = "login-page",
+    div(class = "login-form",
+    h2("Login"),
+    textInput("username", "Username", placeholder = "Enter username"),
+    passwordInput("password", "Password", placeholder = "Enter password"),
+    actionButton("login", "Login", class = "btn btn-primary"),
+    tags$p(class = "login-error", uiOutput("login_error"))
+    )
+    ),
+    tags$footer(class = "footer mt-4",
+    p(paste0("© ", format(Sys.Date(), "%Y"), " Real Estate Admin Dashboard. All rights reserved."))
+    )
+    )
+    }
+    
+    # Admin Dashboard UI (with Sidebar)
+    dashboardUI <- function() {
+    dashboardPage(
+    dashboardHeader(title = "Real Estate Admin"),
+    
+    dashboardSidebar(
+    sidebarMenu(
+    menuItem("Home", tabName = "home", icon = icon("home")),
+    menuItem("Prediction", tabName = "predict", icon = icon("building")),
+    menuItem("Houses", tabName = "houses", icon = icon("building")),
+    menuItem("Profile", tabName = "profile", icon = icon("user")),
+    menuItem("Settings", tabName = "settings", icon = icon("cogs")),
+    menuItem("Logout", icon = icon("sign-out-alt"),
+    onclick = "Shiny.setInputValue('logout', true, {priority: 'event'});")
+    )
+    ),
+    
+    dashboardBody(
+    tabItems(
+    tabItem(
+    tabName = "home",
+    h2("Welcome to the Admin Dashboard"),
+    
+    # First row (2 cards)
+    fluidRow(
+    valueBoxOutput("total_houses", width = 6),
+    valueBoxOutput("houses_sold", width = 6)
+    ),
+    
+    # Second row (2 cards)
+    fluidRow(
+    valueBoxOutput("total_clients", width = 6),
+    valueBoxOutput("max_price", width = 6)
+    ),
+    
+    # Third row (2 cards)
+    fluidRow(
+    valueBoxOutput("min_price", width = 6),
+    valueBoxOutput("countries", width = 6)
+    ),
+    
+    # Fourth row: Displaying the map
+    fluidRow(
+    # Map of the region (using leaflet to render the map)
+    box(
+    title = "Region Map", status = "primary", solidHeader = TRUE, width = 12,
+    leafletOutput("region_map", height = 500)
+    )
+    )
+    ),
+    tabItem(
+    tabName = "predict",
+    h2("Prediction"),
+    
+    # Wrapper div for the form styling
+    div(id = "predict-form",
+    fluidRow(
+    column(
+    width = 6,  # This makes the form occupy half the width
+    offset = 3,  # This centers the form horizontally
+    box(
+    title = "Input Parameters",
+    status = "primary",
+    solidHeader = TRUE,
+    width = NULL,
+    
+    # First row of inputs (2 per row)
+    fluidRow(
+    column(6, textInput("LND_SQFOOT", "Land Area (Square Feet)", value = "", placeholder = "0")),
+    column(6, textInput("TOT_LVG_AREA", "Total Living Area (Square Feet)", value = "", placeholder = "0"))
+    ),
+    
+    fluidRow(
+    column(6, textInput("SPEC_FEAT_VAL", "Special Feature Value", value = "", placeholder = "0")),
+    column(6, textInput("RAIL_DIST", "Distance to Nearest Rail", value = "", placeholder = "0"))
+    ),
+    
+    fluidRow(
+    column(6, textInput("OCEAN_DIST", "Distance to Ocean", value = "", placeholder = "0")),
+    column(6, textInput("WATER_DIST", "Distance to Water Body", value = "", placeholder = "0"))
+    ),
+    
+    fluidRow(
+    column(6, textInput("CNTR_DIST", "Distance to City Center", value = "", placeholder = "0")),
+    column(6, textInput("SUBCNTR_DI", "Distance to Sub-Center", value = "", placeholder = "0"))
+    ),
+    
+    fluidRow(
+    column(6, textInput("HWY_DIST", "Distance to Highway", value = "", placeholder = "0")),
+    column(6, textInput("age", "Age of Property", value = "", placeholder = "0"))
+    ),
+    
+    fluidRow(
+    column(6, textInput("structure_quality", "Structure Quality Rating (1-10)", value = "", placeholder = "0"))
+    ),
+    
+    # Predict button (spanning full width of the form)
+    actionButton("predict", "Predict Price", icon = icon("check"), width = "100%")
+    )
+    )
+    )
+    )
+    ),
+    tabItem(
+    tabName = "houses",
+    h2("Houses"),
+    
+    # Search bar and button in the same row, aligned to the top-right corner
+    fluidRow(
+    column(12,
+    # Wrapping div for the search bar and button to align them
+    div(
+    style = "display: flex; justify-content: flex-end; align-items: center; gap: 20px; margin-bottom: 20px;",  # Flexbox with space between
+    
+    # Global search input field with placeholder text
+    tags$div(
+    style = "display: flex; align-items: center;",  # Ensure vertical alignment
+    uiOutput("global_search_ui")
+    ),
+    
+    # "Add New House" button
+    actionButton("add_house", "Add New House", class = "btn btn-primary",
+    style = "height: 38px; padding-top: 7px;"),  # Adjust height and padding
+    actionButton("delete_row", "Delete Selected Row", icon = icon("trash"), class = "btn-danger"),
+    br(), br(),
+    )
+    )
+    ),
+    
+    # Table for displaying house data below the search bar and button
+    fluidRow(
+    column(12,
+    DTOutput("houses_table")  # Table for displaying house data
+    )
+    )
+    ),
+    tabItem(tabName = "profile", h2("Your Profile")),
+    tabItem(tabName = "settings", h2("Settings"))
+    )
+    )
+    )
+    }
+    
+    # Handle login logic
+    observeEvent(input$login, {
+    if (input$username == "admin" && input$password == "password") {
+    logged_in(TRUE)  # Set login state to TRUE
+    } else {
+    output$login_error <- renderUI({
+    "Invalid username or password"
+    })
+    }
+    })
+    
+    # Handle logout logic
+    observeEvent(input$logout, {
+    logged_in(FALSE)  # Reset login state to FALSE when logout is clicked
+    })
+    
+    ###Prediction Logic
+    observeEvent(input$predict, {
+    input_data <- data.frame(
+    LND_SQFOOT = as.numeric(input$LND_SQFOOT),
+    TOT_LVG_AREA = as.numeric(input$TOT_LVG_AREA),
+    SPEC_FEAT_VAL = as.numeric(input$SPEC_FEAT_VAL),
+    RAIL_DIST = as.numeric(input$RAIL_DIST),
+    OCEAN_DIST = as.numeric(input$OCEAN_DIST),
+    WATER_DIST = as.numeric(input$WATER_DIST),
+    CNTR_DIST = as.numeric(input$CNTR_DIST),
+    SUBCNTR_DI = as.numeric(input$SUBCNTR_DI),
+    HWY_DIST = as.numeric(input$HWY_DIST),
+    age = as.numeric(input$age),
+    structure_quality = as.numeric(input$structure_quality)
+    )
+    
+    # Check for NA inputs
+    if (any(is.na(input_data))) {
+    showModal(modalDialog(
+    title = "Missing Input",
+    "Please fill in all input fields correctly.",
+    easyClose = TRUE,
+    footer = modalButton("Close")
+    ))
+    return(NULL)
+    }
+    
+    #se your prediction function
+    predicted_price <- predict_house_price(input_data)
+    
+    # Format result
+    formatted_price <- paste0("£", formatC(predicted_price, format = "f", digits = 2, big.mark = ","))
+    
+    # Show result
+    showModal(modalDialog(
+    title = tags$h3("Predicted Price", style = "font-weight: bold; text-align: center;"),
+    tags$h4(formatted_price, style = "font-weight: bold; font-size: 1.5em; text-align: center; color: #007bff;"),
+    easyClose = TRUE,
+    footer = modalButton("Close")
+    ))
+    })
+    
+    ### HOUSE PAGE SERVER LOGIC #####################
+    
+    # Render the table of houses with global search feature enabled for SALE_PRC column only
+    # Render the table initially with all data
+    output$houses_table <- renderDT({
+    datatable(
+    housing_data,
+    editable = TRUE,
+    options = list(
+    pageLength = 10,
+    searching = FALSE,  # Enable DataTables' built-in search for the initial load
+    dom = 'lfrtip'     # Ensure layout includes the search field
+    )
+    ) %>%
+    formatCurrency('SALE_PRC', digits = 2)  # Format SALE_PRC as currency
+    })
+    
+    # Observer for the global search input
+    observeEvent(input$global_search, {
+    search_value <- input$global_search
+    
+    # Convert the search value to numeric, handling any non-numeric input gracefully
+    search_value_numeric <- as.numeric(search_value)
+    
+    # If the search value is empty or not numeric, show all data
+    filtered_data <- if (is.na(search_value_numeric) || search_value == "") {
+    housing_data  # No filter if search input is empty or invalid
+    } else {
+    # Filter using exact match on SALE_PRC (rounded to 2 decimal places)
+    filtered_data <- housing_data[round(housing_data$SALE_PRC, 2) == round(search_value_numeric, 2), ]
+    }
+    
+    # Render the filtered data
+    output$houses_table <- renderDT({
+    datatable(
+    filtered_data,
+    editable = TRUE,
+    options = list(
+    pageLength = 10,
+    searching = FALSE,  # Disable DataTables' built-in search after global search
+    dom = 'lfrtip',
+    responsive = TRUE
+    )
+    ) %>%
+    formatCurrency('SALE_PRC', digits = 2)  # Format SALE_PRC as currency
+    })
+    })
+    
+    output$global_search_ui <- renderUI({
+    textInput("global_search", label = NULL, placeholder = "Search by Price")
+    })
+    
+    # Show modal for adding new house
+    observeEvent(input$add_house, {
+    showModal(modalDialog(
+    title = "Add New House",
+    easyClose = TRUE,
+    footer = tagList(
+    modalButton("Close"),
+    actionButton("save_house", "Save House", class = "btn btn-success")
+    ),
+    
+    # Grid wrapper div for all inputs (12 fields, 2 per row)
+    div(class = "modal-grid",  # This div class will use the grid styling
+    fluidRow(
+    column(6, numericInput("TOT_LVG_AREA", "Total Living Area (Square Feet)", value = 0, min = 0)),
+    column(6, numericInput("SPEC_FEAT_VAL", "Special Feature Value", value = 0, min = 0))
+    ),
+    
+    fluidRow(
+    column(6, numericInput("structure_quality", "Structure Quality Rating (1-10)", value = 5, min = 1, max = 10)),
+    column(6, numericInput("SUBCNTR_DI", "Distance to Sub-Center", value = 0, min = 0))
+    ),
+    
+    fluidRow(
+    column(6, numericInput("LND_SQFOOT", "Land Area (Square Feet)", value = 0, min = 0)),
+    column(6, numericInput("OCEAN_DIST", "Distance to Ocean", value = 0, min = 0))
+    ),
+    
+    fluidRow(
+    column(6, numericInput("CNTR_DIST", "Distance to City Center", value = 0, min = 0)),
+    column(6, numericInput("HWY_DIST", "Distance to Highway", value = 0, min = 0))
+    ),
+    
+    fluidRow(
+    column(6, numericInput("WATER_DIST", "Distance to Water Body", value = 0, min = 0)),
+    column(6, numericInput("age", "Age of Property (Years)", value = 0, min = 0))
+    ),
+    
+    fluidRow(
+    column(6, numericInput("RAIL_DIST", "Distance to Nearest Rail", value = 0, min = 0)),
+    column(6, numericInput("SALE_PRC", "Sale Price", value = 0, min = 0))
+    )
+    )
+    ))
+    })
+    
+    # Save the new house data
+    observeEvent(input$save_house, {
+    new_house <- data.frame(
+    TOT_LVG_AREA = input$TOT_LVG_AREA,
+    SPEC_FEAT_VAL = input$SPEC_FEAT_VAL,
+    structure_quality = input$structure_quality,
+    SUBCNTR_DI = input$SUBCNTR_DI,
+    LND_SQFOOT = input$LND_SQFOOT,
+    OCEAN_DIST = input$OCEAN_DIST,
+    CNTR_DIST = input$CNTR_DIST,
+    HWY_DIST = input$HWY_DIST,
+    WATER_DIST = input$WATER_DIST,
+    age = input$age,
+    RAIL_DIST = input$RAIL_DIST,
+    SALE_PRC = input$SALE_PRC
+    )
+    
+    # Append new data to housing_data
+    housing_data <<- rbind(housing_data, new_house)
+    
+    # Save updated dataset to CSV
+    write.csv(housing_data, "C:/Users/-/OneDrive - University of Bolton/DAT703-RClass/Porfolio 3/housing_data.csv", row.names = FALSE)
+    
+    # Update the table with new data
+    output$houses_table <- renderDT({
+    datatable(housing_data, editable = TRUE, options = list(pageLength = 10))
+    })
+    
+    # Close the modal
+    removeModal()
+    
+    # Show success message
+    showModal(modalDialog(
+    title = "Success",
+    "House added successfully!",
+    easyClose = TRUE,
+    footer = modalButton("Close")
+    ))
+    })
+    
+    
+    # Edit a row from the table (if a cell is modified)
+    observeEvent(input$houses_table_cell_edit, {
+    info <- input$houses_table_cell_edit
+    modified_data <- housing_data
+    modified_data[info$row, info$col] <- info$value
+    housing_data <<- modified_data
+    
+    # Save updated dataset to CSV
+    write.csv(housing_data, "C:/Users/-/OneDrive - University of Bolton/DAT703-RClass/Porfolio 3/housing_data.csv", row.names = FALSE)
+    
+    # Update the table
+    output$houses_table <- renderDT({
+    datatable(housing_data, editable = TRUE, options = list(pageLength = 10))
+    })
+    })
+    
+    # Delete a row from the dataset (if a row is selected and deleted)
+    observeEvent(input$delete_row, {
+    selected_row <- input$houses_table_rows_selected
+    if (length(selected_row) > 0) {
+    housing_data <<- housing_data[-selected_row, ]
+    
+    # Save updated dataset to CSV
+    write.csv(housing_data, "C:/Users/-/OneDrive - University of Bolton/DAT703-RClass/Porfolio 3/housing_data.csv", row.names = FALSE)
+    
+    # Update the table
+    output$houses_table <- renderDT({
+    datatable(housing_data, editable = TRUE, selection = "single", options = list(pageLength = 10))
+    })
+    }
+    })
+    
+    ###END
+    }
+```
+
+## Run the App
+
+```{r}
+    # Run the Shiny app
+    shinyApp(ui = ui, server = server)
+```
+
+# End!!!
