@@ -1,0 +1,278 @@
+/* Global Styles */
+body {
+  font-family: 'Arial', sans-serif;
+  background-color: #f4f7fb;
+  margin: 0;
+  padding: 0;
+  color: #333;
+}
+
+/* Header and Footer Styles */
+.dashboard-header, .footer {
+  background-color: #1d2d44;
+  color: white;
+  text-align: center;
+  font-weight: bold;
+}
+
+.dashboard-header {
+  padding: 15px 20px;
+  font-size: 20px;
+  box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+}
+
+.footer {
+  padding: 10px 0;
+  position: relative;
+  bottom: 0;
+  width: 100%;
+}
+
+.login-page {
+  position: relative; /* Required for overlay positioning */
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  height: 100vh;
+  background-image: url('house-4885425_1280.jpg');
+  background-size: cover;
+  background-position: center;
+  background-repeat: no-repeat;
+  overflow: hidden;
+}
+
+/* Overlay */
+.login-page::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background-color: rgba(0, 0, 0, 0.8); /* Black overlay with 40% opacity */
+  z-index: 1;
+}
+
+/* Ensure form stays above the overlay */
+.login-form {
+  position: relative;
+  z-index: 2;
+}
+
+.login-form {
+  background-color: #fff;
+  padding: 30px;
+  border-radius: 8px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+  width: 350px;
+}
+
+.login-form h2 {
+  text-align: center;
+  font-size: 24px;
+  margin-bottom: 20px;
+  color: #1d2d44;
+}
+
+.login-form input[type="text"], .login-form input[type="password"] {
+  width: 100%;
+  padding: 12px;
+  margin-bottom: 20px;
+  border: 1px solid #ccc;
+  border-radius: 4px;
+  font-size: 16px;
+  transition: border-color 0.3s ease;
+}
+
+.login-form input[type="text"]:focus, .login-form input[type="password"]:focus {
+  border-color: #1d2d44;
+  outline: none;
+}
+
+.login-form .btn, #predict-form .action-button {
+  width: 100%;
+  padding: 12px;
+  background-color: #1d2d44;
+  color: white;
+  border: none;
+  border-radius: 8px;
+  font-size: 16px;
+  cursor: pointer;
+  transition: background-color 0.3s ease;
+}
+
+.login-form .btn:hover, #predict-form .action-button:hover {
+  background-color: #375a7f;
+}
+
+.login-form p {
+  text-align: center;
+  color: red;
+  font-size: 14px;
+  margin-top: 10px;
+}
+
+/* Sidebar Styles */
+.dashboard-sidebar {
+  background-color: #1d2d44;
+  color: #fff;
+  width: 250px;
+  position: fixed;
+  height: 100%;
+  padding-top: 60px;
+  box-shadow: 4px 0 10px rgba(0, 0, 0, 0.1);
+  transition: all 0.3s ease-in-out;
+}
+
+.dashboard-sidebar a {
+  display: block;
+  color: #fff;
+  padding: 12px 20px;
+  text-decoration: none;
+  font-size: 18px;
+  transition: background-color 0.3s ease;
+}
+
+.dashboard-sidebar a:hover,
+.dashboard-sidebar a.active {
+  background-color: #375a7f;
+}
+
+.sidebar-menu {
+  padding-left: 0;
+}
+
+.sidebar-menu .menu-item {
+  list-style-type: none;
+  padding: 10px 0;
+}
+
+.sidebar-toggle-btn {
+  position: absolute;
+  top: 20px;
+  left: 260px;
+  background-color: #1d2d44;
+  color: white;
+  border: none;
+  font-size: 16px;
+  padding: 10px;
+  cursor: pointer;
+  border-radius: 4px;
+}
+
+.sidebar-toggle-btn:hover {
+  background-color: #375a7f;
+}
+
+/* Dashboard Body */
+.dashboard-body {
+  margin-left: 250px;
+  padding: 20px;
+}
+
+.dashboard-body h2 {
+  font-size: 30px;
+  color: #1d2d44;
+  margin-bottom: 20px;
+}
+
+.dashboard-body p {
+  font-size: 18px;
+  color: #666;
+}
+
+.dashboard-body .content-box {
+  background-color: #fff;
+  padding: 20px;
+  border-radius: 8px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+}
+
+/* Card Styles */
+.dashboard-body .content-box h3 {
+  color: #1d2d44;
+  font-size: 24px;
+  margin-bottom: 10px;
+}
+
+.dashboard-body .content-box p {
+  font-size: 16px;
+  color: #666;
+}
+
+/* Home page Cards */
+.small-box {
+  min-height: 180px;
+  padding: 30px 20px;
+  font-size: 18px;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+}
+
+.small-box .icon {
+  top: 20px;
+  font-size: 45px;
+}
+
+.small-box .inner h3 {
+  font-size: 40px;
+  font-weight: bold;
+  margin: 0;
+}
+
+.small-box .inner p {
+  font-size: 22px;
+  margin: 0;
+}
+
+/* PREDICTION FORM */
+#predict-form {
+  background-color: #fff;
+  padding: 20px;
+  border-radius: 8px;
+}
+
+#predict-form .box {
+  padding: 20px;
+  border-radius: 8px;
+}
+
+#predict-form .box .box-header h3 {
+  text-align: center;
+  font-weight: bold;
+}
+
+#predict-form .box input[type="number"], #predict-form .form-control {
+  border-radius: 4px;
+  height: 50px;
+  margin-bottom: 15px;
+  padding-left: 10px;
+  font-size: 16px;
+}
+
+#predict-form .form-control::placeholder {
+  color: #007bff;
+  font-weight: bold;
+}
+
+#predict-form .box .form-group {
+  margin-bottom: 20px;
+}
+
+/* Ensuring full-width button */
+#predict-form .action-button {
+  margin-top: 20px;
+  display: block;
+  width: 100%;
+  background-color: #007bff;
+  color: white;
+  border-radius: 8px;
+  padding: 12px;
+}
+
+#predict-form .action-button:hover {
+  background-color: #0056b3;
+}
+
+/* MODAL SECTION */
